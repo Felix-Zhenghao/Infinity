@@ -175,7 +175,7 @@ class Infinity(nn.Module):
         assert round(t.sum().item()) in {0, dist.get_world_size()}, f'flash_fused_op_installed: {t}'
         
         super().__init__()
-        self.rng = torch.Generator(device=dist.get_device())
+        self.rng = torch.Generator(device="cuda") # NOTE: should be dist.get_device(), hard code for now
         self.maybe_record_function = nullcontext
         self.text_maxlen = text_maxlen
         self.t2i = text_channels != 0
@@ -497,10 +497,15 @@ class Infinity(nn.Module):
         # we need to convert scale_schedule to vae_scale_schedule by multiply 2 to h and w
         if self.apply_spatial_patchify:
             vae_scale_schedule = [(pt, 2*ph, 2*pw) for pt, ph, pw in scale_schedule]
+            scale_schedule = [(pt, ph, pw) for pt, ph, pw in scale_schedule]
         else:
             vae_scale_schedule = [(pt, ph, pw) for pt, ph, pw in scale_schedule]
+            scale_schedule = [(pt, ph, pw) for pt, ph, pw in scale_schedule]
         
         kv_compact, lens, cu_seqlens_k, max_seqlen_k = label_B_or_BLT
+        if self.d_vlm is not None:
+            kv_compact = self.vlm_to_kv_compact(kv_compact).contiguous() # float32
+
         if any(np.array(cfg_list) != 1):
             bs = 2*B
             if not negative_label_B_or_BLT:
