@@ -104,6 +104,7 @@ class Infinity(nn.Module):
         inference_mode=False,
         scale_schedule=None,
         d_vlm=None,
+        d_dino=None,
     ):
         # set hyperparameters
         self.C = embed_dim
@@ -179,14 +180,7 @@ class Infinity(nn.Module):
         self.maybe_record_function = nullcontext
         self.text_maxlen = text_maxlen
         self.t2i = text_channels != 0
-        
-        if self.d_vlm is not None:
-            self.vlm_to_kv_compact = nn.Sequential(
-                nn.Linear(self.d_vlm, self.Ct5),
-                nn.GELU(approximate='tanh'),
-                nn.Linear(self.Ct5, self.Ct5),
-            )
-        
+
         # [inp & position embedding]
         init_std = math.sqrt(1 / self.C / 3)
         self.norm0_cond = nn.Identity()
@@ -394,8 +388,8 @@ class Infinity(nn.Module):
         with torch.amp.autocast('cuda', enabled=False):
             kv_compact, lens, cu_seqlens_k, max_seqlen_k = label_B_or_BLT
             
-            if self.d_vlm is not None:
-                kv_compact = self.vlm_to_kv_compact(kv_compact).contiguous() # float32
+            # if self.d_vlm is not None:
+            #     kv_compact = self.vlm_to_kv_compact(kv_compact).contiguous() # float32
                 # print(f"🚀🚀🚀🚀🚀🚀🚀 {kv_compact.dtype=}")
             # drop cond
             total = 0
