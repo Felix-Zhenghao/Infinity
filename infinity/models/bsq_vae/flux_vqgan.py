@@ -540,7 +540,7 @@ class AutoEncoder(nn.Module):
             codes = self.quantizer.lfq.indices_to_codes(idx_Bl, label_type)
             summed_codes += F.interpolate(codes, size=scale_schedule[-1], mode=self.quantizer.z_interplote_up)
         assert summed_codes.shape[-3] == 1
-        x_recon = self.decoder(summed_codes.squeeze(-3))
+        x_recon = self.decoder(summed_codes.squeeze(-3)) # NOTE: hardcode for AMP
         x_recon = torch.clamp(x_recon, min=-1, max=1)
         return summed_codes, x_recon
 

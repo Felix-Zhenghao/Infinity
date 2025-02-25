@@ -17,17 +17,18 @@ class BitwiseSelfCorrection(object):
         self.debug_bsc = args.debug_bsc
 
     def flip_requant(self, vae_scale_schedule, inp_B3HW, raw_features, device, save_path = None, should_save=True):
+        
+        B = raw_features.shape[0]
+        if raw_features.dim() == 4:
+            codes_out = raw_features.unsqueeze(2)
+        else:
+            codes_out = raw_features
+        cum_var_input = 0
+        gt_all_bit_indices = []
+        pred_all_bit_indices = []
+        x_BLC_wo_prefix = []
+        all_losses = []
         with torch.amp.autocast('cuda', enabled = False):
-            B = raw_features.shape[0]
-            if raw_features.dim() == 4:
-                codes_out = raw_features.unsqueeze(2)
-            else:
-                codes_out = raw_features
-            cum_var_input = 0
-            gt_all_bit_indices = []
-            pred_all_bit_indices = []
-            x_BLC_wo_prefix = []
-            all_losses = []
             for si, (pt, ph, pw) in enumerate(vae_scale_schedule):
                 residual = codes_out - cum_var_input
                 if si != len(vae_scale_schedule)-1:
@@ -53,49 +54,51 @@ class BitwiseSelfCorrection(object):
                         this_scale_input = torch.nn.functional.pixel_unshuffle(this_scale_input.squeeze(-3), 2)
                     x_BLC_wo_prefix.append(this_scale_input.reshape(*this_scale_input.shape[:2], -1).permute(0,2,1)) # (B,H/2*W/2,4C) or (B,H*W,C)
 
-            if self.apply_spatial_patchify:
-                gt_ms_idx_Bl = []
-                for item in gt_all_bit_indices:
-                    # item shape: (B,1,H,W,d)
-                    item = item.squeeze(1).permute(0,3,1,2) # (B,d,H,W)
-                    # (B,d,H,W) -> (B,4d,H/2,W/2)
-                    item = torch.nn.functional.pixel_unshuffle(item, 2)
-                    # (B,4d,H/2,W/2) -> (B,H/2,W/2,4d) -> (B,H/2*w/2,4d)
-                    item = item.permute(0,2,3,1).reshape(B, -1, 4*self.vae.codebook_dim)
-                    gt_ms_idx_Bl.append(item)
-            else:
-                gt_ms_idx_Bl = [item.reshape(B, -1, self.vae.codebook_dim) for item in gt_all_bit_indices]
-            x_BLC_wo_prefix = torch.cat(x_BLC_wo_prefix, 1)
+        if self.apply_spatial_patchify:
+            gt_ms_idx_Bl = []
+            for item in gt_all_bit_indices:
+                # item shape: (B,1,H,W,d)
+                item = item.squeeze(1).permute(0,3,1,2) # (B,d,H,W)
+                # (B,d,H,W) -> (B,4d,H/2,W/2)
+                item = torch.nn.functional.pixel_unshuffle(item, 2)
+                # (B,4d,H/2,W/2) -> (B,H/2,W/2,4d) -> (B,H/2*w/2,4d)
+                item = item.permute(0,2,3,1).reshape(B, -1, 4*self.vae.codebook_dim)
+                gt_ms_idx_Bl.append(item)
+        else:
+            gt_ms_idx_Bl = [item.reshape(B, -1, self.vae.codebook_dim) for item in gt_all_bit_indices]
+        x_BLC_wo_prefix = torch.cat(x_BLC_wo_prefix, 1)
 
-            if self.debug_bsc:
-                recon_loss = self.visualize(vae_scale_schedule, inp_B3HW, gt_all_bit_indices, pred_all_bit_indices, save_path=save_path, should_save=should_save)
-            
-            # get losses
-            all_losses = torch.mean(torch.stack(all_losses, dim = -1))
+        if self.debug_bsc:
+            recon_loss = self.visualize(vae_scale_schedule, inp_B3HW, gt_all_bit_indices, pred_all_bit_indices, save_path=save_path, should_save=should_save)
+        
+        # get losses
+        all_losses = torch.mean(torch.stack(all_losses, dim = -1))
         
         return x_BLC_wo_prefix, gt_ms_idx_Bl, all_losses, recon_loss
     
     def visualize(self, vae_scale_schedule, inp_B3HW, gt_all_bit_indices, pred_all_bit_indices, save_path = None, should_save=True):
-        # gt_img = (inp_B3HW.squeeze(-3) + 1) / 2 * 255
-        # gt_img = gt_img[0].permute(1,2,0).cpu().numpy().astype(np.uint8)[:,:,::-1]
         recons_img_2, recon_loss = self.labels2image(inp_B3HW, gt_all_bit_indices, label_type='bit_label', scale_schedule=vae_scale_schedule) # TODO: check which loss to use
-        recons_img_3, _ = self.labels2image(inp_B3HW, pred_all_bit_indices, label_type='bit_label', scale_schedule=vae_scale_schedule) # TODO: check which loss to use
-        # cat_image = np.concatenate([gt_img, recons_img_2, recons_img_3], axis=1)
-        
-        # if should_save:
-        #     save_path = osp.abspath('non_teacher_force.jpg') if save_path is None else save_path
-        #     cv2.imwrite(save_path, cat_image)
-        #     print(f'Save to {save_path}')
+
+        if should_save:
+            gt_img = (inp_B3HW.squeeze(-3) + 1) / 2 * 255
+            gt_img = gt_img[0].permute(1,2,0).cpu().numpy().astype(np.uint8)[:,:,::-1]
+            recons_img_3, _ = self.labels2image(inp_B3HW, pred_all_bit_indices, label_type='bit_label', scale_schedule=vae_scale_schedule) # TODO: check which loss to use
+            cat_image = np.concatenate([gt_img, recons_img_2, recons_img_3], axis=1)
+            save_path = osp.abspath('non_teacher_force.jpg') if save_path is None else save_path
+            cv2.imwrite(save_path, cat_image)
+            print(f'Save to {save_path}')
         
         return recon_loss
         
-    def labels2image(self, inp_B3HW, all_indices, label_type='int_label', scale_schedule=None):
+    def labels2image(self, inp_B3HW, all_indices, label_type='int_label', scale_schedule=None, should_save=True):
         summed_codes, recons_imgs = self.vae.decode_from_indices(all_indices, scale_schedule, label_type)
         recons_loss = torch.nn.functional.mse_loss(recons_imgs, inp_B3HW)
-        # recons_img = recons_imgs[0]
-        # recons_img = (recons_img + 1) / 2
-        # recons_img = recons_img.detach().permute(1, 2, 0).mul_(255).cpu().numpy().astype(np.uint8)[:,:,::-1]
-        return 0, recons_loss
+        if should_save:
+            recons_img = recons_imgs[0]
+            recons_img = (recons_img + 1) / 2
+            recons_img = recons_img.detach().permute(1, 2, 0).mul_(255).cpu().numpy().astype(np.uint8)[:,:,::-1]
+            return recons_img, recons_loss
+        return None, recons_loss
 
     def features2image(self, raw_features):
         recons_imgs = self.vae.decode(raw_features.squeeze(-3))
