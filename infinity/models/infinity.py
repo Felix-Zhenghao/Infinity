@@ -662,7 +662,7 @@ class Infinity(nn.Module):
             img = vae.viz_from_ms_h_BChw(ret, scale_schedule=scale_schedule, same_shape=True, last_one=True)
 
         img = (img + 1) / 2
-        img = img.permute(0, 2, 3, 1).mul_(255).to(torch.uint8).flip(dims=(3,))
+        img = img.permute(0, 2, 3, 1).mul_(255).to(torch.uint8)
         return ret, idx_Bl_list, img
     
     @for_visualize
