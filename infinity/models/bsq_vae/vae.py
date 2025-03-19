@@ -245,20 +245,20 @@ def vae_model(vqgan_ckpt, schedule_mode, codebook_dim, codebook_size, test_mode=
     else:
         state_dict = args.vqgan_ckpt
         
-    new_state_dict = {}
-    for key in state_dict:
-        if key.startswith("vae."):
-            new_state_dict[key[4:]] = state_dict[key]
-        else:
-            new_state_dict[key] = state_dict[key]
-            
-    vae.load_state_dict(new_state_dict)
-    
-    # if state_dict:
-    #     if args.ema == "yes":
-    #         vae, new_state_dict, loaded_keys = load_cnn(vae, state_dict["ema"], prefix="", expand=False)
+    # new_state_dict = {}
+    # for key in state_dict:
+    #     if key.startswith("vae."):
+    #         new_state_dict[key[4:]] = state_dict[key]
     #     else:
-    #         vae, new_state_dict, loaded_keys = load_cnn(vae, state_dict["vae"], prefix="", expand=False)
+    #         new_state_dict[key] = state_dict[key]
+            
+    # vae.load_state_dict(new_state_dict)
+    
+    if state_dict:
+        if args.ema == "yes":
+            vae, new_state_dict, loaded_keys = load_cnn(vae, state_dict["ema"], prefix="", expand=False)
+        else:
+            vae, new_state_dict, loaded_keys = load_cnn(vae, state_dict["vae"], prefix="", expand=False)
     if test_mode:
         vae.eval()
         [p.requires_grad_(False) for p in vae.parameters()]

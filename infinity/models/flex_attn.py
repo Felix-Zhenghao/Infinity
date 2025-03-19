@@ -87,7 +87,7 @@ class FlexAttn(nn.Module):
         self.support_mask_type = ["var", "causal", "var_infer_mask_with_kv_cache"]
         self.auto_padding = auto_padding
 
-        self.flex_attention = torch.compile(flex_attention)
+        self.flex_attention = torch.compile(flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs")
 
         self.block_scales = block_scales
         self.lengths = [ x * y * z for x,y,z in block_scales]
