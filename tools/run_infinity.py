@@ -20,11 +20,11 @@ from PIL import Image, ImageEnhance
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
-from Infinity.infinity.models.infinity import Infinity
-from Infinity.infinity.models.basic import *
+from infinity.models.infinity import Infinity
+from infinity.models.basic import *
 import PIL.Image as PImage
 from torchvision.transforms.functional import to_tensor
-from Infinity.infinity.utils.dynamic_resolution import dynamic_resolution_h_w, h_div_w_templates
+from infinity.utils.dynamic_resolution import dynamic_resolution_h_w, h_div_w_templates
 
 
 def extract_key_val(text):
